@@ -1,0 +1,3 @@
+This is a prototype of a generator that samples distributions of classes.
+The distribution can evolve through time as defined in the configuration
+file. One unit of time corresponds to one sampling step.
