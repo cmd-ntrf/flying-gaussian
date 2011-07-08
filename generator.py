@@ -1,5 +1,8 @@
 #!/usr/bin/env python2.7
-
+"""Random points generator where the points are sampled from
+labeled distributions that can move, rotate and scale along time.
+Each sample correspond to one unit of time.
+"""
 import json
 import numpy
 import random
