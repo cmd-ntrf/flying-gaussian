@@ -13,7 +13,7 @@ import pylab
 from matplotlib.patches import Ellipse
 from collections import namedtuple
 from operator import attrgetter, itemgetter
-from math import sqrt, cos, sin, pi, atan, atan2
+from math import sqrt, cos, sin, pi, atan2
 from numpy import linalg
 
 # Global constant
