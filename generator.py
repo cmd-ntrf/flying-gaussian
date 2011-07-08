@@ -10,19 +10,22 @@ import argparse
 
 import pylab
 
+from matplotlib.colors import ColorConverter
 from matplotlib.patches import Ellipse
-from collections import namedtuple
+from collections import namedtuple, deque
 from operator import attrgetter, itemgetter
 from math import sqrt, cos, sin, pi, atan2
 from numpy import linalg
+from itertools import imap
 
 # Global constant
 LAST_N_PTS = 25
 COLORS = ['b', 'g', 'r', 'c', 'm', 'y', 'k']
+color_conv = ColorConverter()
 
 class Distribution(object):
     """Object representing a multivariate normal distribution that 
-    changes along time. The object contains a list of transformations
+    changes dynamically. The object contains a list of transformations
     that are applied sequentially, and that modify the scale, the position
     and the angle of the distribution.
     """
@@ -32,8 +35,7 @@ class Distribution(object):
         self.scale = 1.0
         
     def sample(self, size=1):
-        """Sample the actual distribution *size* times.
-        """
+        """Sample the actual distribution *size* times."""
         return numpy.random.multivariate_normal(self.centroid, self.scale * self.matrix, size)
         
     def update(self, time):
@@ -68,7 +70,7 @@ class Distribution(object):
                         matrix[j][i] = sign*sin(angle)
                         self.rotation = numpy.dot(self.rotation, matrix)
                         idx += 1
-            
+                self.rotation_inv = linalg.inv(self.rotation)
                 sigma = self.scale * self.cur_trans.scale - self.scale
                 self.delta_s = sigma / nbr_steps
             else:
@@ -78,27 +80,12 @@ class Distribution(object):
         if self.update_count % self.cur_trans.steps == 0:
             self.centroid += self.delta_t
             self.scale += self.delta_s
-            self.matrix = numpy.dot(linalg.inv(self.rotation), numpy.dot(self.matrix, (self.rotation)))
+            self.matrix = numpy.dot(self.rotation_inv, numpy.dot(self.matrix, self.rotation))
         
         # Duration of the transformation is over
         if self.update_count == self.cur_trans.duration:
             self.cur_trans = None
             self.update_count = 0
-
-class RingBuffer:
-    """Circular buffer class"""
-    def __init__(self, size):
-        self.data = [None for i in xrange(size)]
-
-    def append(self, x):
-        self.data.pop(0)
-        self.data.append(x)
-
-    def size(self):
-        return len([elem for elem in self.data if elem is not None])
-
-    def iter(self):
-        return (elem for elem in self.data if elem is not None)
 
 Class = namedtuple('Class', ['label', 'weight', 'distributions', 'start_time'])
 Transform = namedtuple('Transform', ['duration', 'steps', 'translate', 'scale', 'rotate'])
@@ -129,10 +116,9 @@ def readfile(filename):
             weight_sumd += distr.weight
             
             distr.centroid = jdistrib['centroid']
+            distr.ndim = len(distr.centroid)            
             distr.matrix = numpy.array(jdistrib['cov_matrix'])
             distr.transforms = []
-            
-            distr.ndim = len(distr.centroid)
             
             for jtrans in reversed(jdistrib.get('transforms', [])):
                 duration = jtrans.get('duration', 1)
@@ -147,7 +133,7 @@ def readfile(filename):
                                                   rotate))
             distribs.append(distr)
         
-        cstart_time = min(distribs, key=attrgetter('start_time')).start_time
+        cstart_time = min(imap(attrgetter('start_time'), distribs))
         class_list.append(Class(jclass['class'], jclass['weight'], distribs, cstart_time))
         weight_sumc += class_list[-1].weight
         if weight_sumd != 1.0:
@@ -157,7 +143,6 @@ def readfile(filename):
         print 'Warning: weights sum the set of classes is not equal to one, weights will be normalized.'
 
     return class_list
-
 
 def draw_cov_ellipse(centroid, cov_matrix, sigma, ax, nbr_sigma=2.0, color='b'):
     """Example from matplotlib mailing list :
@@ -175,11 +160,9 @@ def draw_cov_ellipse(centroid, cov_matrix, sigma, ax, nbr_sigma=2.0, color='b'):
     
     return ax.add_patch(ellipse)    
 
-
-def plot_class(time, ref_labels, class_list, pnts_lbls, fig, axis):
+def plot_class(time, ref_labels, class_list, points, labels, fig, axis):
     """Plot the distributions ellipses and the last sampled points.
     """
-    pylab.ioff()
     axis.clear()
     
     min_x = min_y = float('inf')
@@ -196,12 +179,12 @@ def plot_class(time, ref_labels, class_list, pnts_lbls, fig, axis):
     axis.set_xlim(min_x,max_x)
     axis.set_ylim(min_y,max_y)
 
-    # Draw the last sampled point
-    alpha = alph_inc = 1.0 / pnts_lbls.size()
-    for point, label in pnts_lbls.iter():
-        label_idx = ref_labels.index(label)
-        axis.plot(point[0], point[1], COLORS[label_idx]+'o', alpha=alpha)
-        alpha += alph_inc
+    # Draw the last sampled points
+    x = map(itemgetter(0), points)
+    y = map(itemgetter(1), points)
+    alph_inc = 1.0 / len(labels)
+    colors = [color_conv.to_rgba(COLORS[ref_labels.index(label)], (i+1)*alph_inc) for i, label in enumerate(labels)]
+    axis.scatter(x, y, c=colors, edgecolors='none')
 
     ellipses = []
     labels = []
@@ -217,10 +200,7 @@ def plot_class(time, ref_labels, class_list, pnts_lbls, fig, axis):
                     present = True
 
     axis.legend(ellipses, labels)
-
-    pylab.ion()
     fig.canvas.draw()
-
 
 def weightChoice(seq):
     """Randomly choose an element from the sequence *seq* with a 
@@ -245,7 +225,8 @@ def main(filenae, samples, plot):
         ax1 = pylab.subplot2grid((3,3), (0,0), colspan=3, rowspan=3)
         pylab.ion()
         pylab.show()
-        pnts_lbls = RingBuffer(LAST_N_PTS)
+        points = deque(maxlen=LAST_N_PTS)
+        labels = deque(maxlen=LAST_N_PTS)
         ref_labels = map(attrgetter('label'), class_list)
 
     for i in xrange(samples):
@@ -258,8 +239,9 @@ def main(filenae, samples, plot):
         
         # Plot the resulting distribution if required
         if plot:
-            pnts_lbls.append((spoint, class_.label))
-            plot_class(i, ref_labels, class_list, pnts_lbls, fig, ax1)
+            points.append(spoint)
+            labels.append(class_.label)
+            plot_class(i, ref_labels, class_list, points, labels, fig, ax1)
             # fig.savefig('images2/point_%i.png' % i)
         
         # Update the classes' distributions
@@ -268,8 +250,8 @@ def main(filenae, samples, plot):
                 distrib.update(i)
 
     if args.plot:
-        pylab.ioff()
-        pylab.show()
+          pylab.ioff()
+          pylab.show()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Read a file of classes and return a series of randomly sampled points from those classes.')
