@@ -1,3 +1,5 @@
+#!/usr/bin/env python2.7
+
 import json
 import numpy
 import random
@@ -8,48 +10,12 @@ import pylab
 from matplotlib.patches import Ellipse
 from collections import namedtuple
 from operator import attrgetter, itemgetter
-from math import sqrt, cos, sin, pi, atan
+from math import sqrt, cos, sin, pi, atan, atan2
 from numpy import linalg
 
-
 # Global constant
-LAST_N_PTS = 25
+LAST_N_PTS = 250
 COLORS = ['b', 'g', 'r', 'c', 'm', 'y', 'k']
-
-def weightChoice(seq):
-    """Randomly choose an element from the sequence *seq* with a 
-    bias function of the weight of each element.
-    """
-    sorted_seq = sorted(seq, key=attrgetter("weight"), reverse=True)
-    sum_weights = sum(elem.weight for elem in seq)
-    u = random.random() * sum_weights
-    sum_ = 0.0
-    for elem in sorted_seq:
-        sum_ += elem.weight
-        if sum_ >= u:
-            return elem
-
-class RingBuffer:
-    """Circular buffer class"""
-    def __init__(self, size):
-        self.data = [None for i in xrange(size)]
-
-    def append(self, x):
-        self.data.pop(0)
-        self.data.append(x)
-
-    def size(self):
-        return len([elem for elem in self.data if elem is not None])
-
-    def iter(self):
-        return (elem for elem in self.data if elem is not None)
-        
-def drange(start, stop, step):
-    """Range function working with decimal numbers."""
-    r = start
-    while r < stop:
-        yield r
-        r += step
 
 class Distribution(object):
     """Object representing a multivariate normal distribution that 
@@ -91,7 +57,7 @@ class Distribution(object):
                         matrix = numpy.identity(self.ndim)
                         angle = self.delta_r[idx]
                         sign = 1.0
-                        if i > j:
+                        if i+j % 2 == 0:
                             sign = -1.0
                         matrix[i][i] = cos(angle)
                         matrix[j][j] = cos(angle)
@@ -115,6 +81,21 @@ class Distribution(object):
         if self.update_count == self.cur_trans.duration:
             self.cur_trans = None
             self.update_count = 0
+
+class RingBuffer:
+    """Circular buffer class"""
+    def __init__(self, size):
+        self.data = [None for i in xrange(size)]
+
+    def append(self, x):
+        self.data.pop(0)
+        self.data.append(x)
+
+    def size(self):
+        return len([elem for elem in self.data if elem is not None])
+
+    def iter(self):
+        return (elem for elem in self.data if elem is not None)
 
 Class = namedtuple('Class', ['label', 'weight', 'distributions', 'start_time'])
 Transform = namedtuple('Transform', ['duration', 'steps', 'translate', 'scale', 'rotate'])
@@ -174,29 +155,30 @@ def readfile(filename):
 
     return class_list
 
+
 def draw_cov_ellipse(centroid, cov_matrix, sigma, ax, nbr_sigma=2.0, color='b'):
     """Example from matplotlib mailing list :
     http://www.mail-archive.com/matplotlib-users@lists.sourceforge.net/msg14153.html
     """
-    # orient = math.atan2( 2.0*cov_matrix[0][1], float(cov_matrix[0][0] - cov_matrix[1][1]))*180.0/math.pi / 2.0
-    orient = atan( 2.0*cov_matrix[0][1] / float(cov_matrix[0][0] - cov_matrix[1][1]))*180.0/pi / 2.0
-    width  = nbr_sigma*sigma*sqrt(cov_matrix[0][0])
-    height = nbr_sigma*sigma*sqrt(cov_matrix[1][1])
-    if orient >= 90 and orient < 180:
-        width, height = height, width
+    U, s, Vh = linalg.svd(cov_matrix)
+    orient = atan2(U[1,0],U[0,0])*180.0/pi
+    width = nbr_sigma*sigma*sqrt(s[0])
+    height = nbr_sigma*sigma*sqrt(s[1])
 
     ellipse = Ellipse(xy=centroid, width=width, height=height, angle=orient, fc=color)
     ellipse.set_alpha(0.1)
+    # pylab.arrow(centroid[0], centroid[1], U[0][0], U[0][1], width=0.02)
+    # pylab.arrow(centroid[0], centroid[1], U[1][0], U[1][1], width=0.02)
+    
     return ax.add_patch(ellipse)    
 
-def plot(time, ref_labels, class_list, points, plabels, fig, axis):
+
+def plot_class(time, ref_labels, class_list, points, plabels, fig, axis):
     pylab.ioff()
     axis.clear()
     
-    min_x = float('inf')
-    max_x = float('-inf')
-    min_y = float('inf')
-    max_y = float('-inf')
+    min_x = min_y = float('inf')
+    max_x = max_y = float('-inf')
     
     for class_ in class_list:
         for distrib in class_.distributions:
@@ -210,9 +192,11 @@ def plot(time, ref_labels, class_list, points, plabels, fig, axis):
     axis.set_ylim(min_y,max_y)
 
     # Draw the last sampled point
-    for point, label, alpha in zip(points.iter(), plabels.iter(), drange(1.0/points.size(), 1.0, 1.0/points.size())):
+    alpha = alph_inc = 1.0 / points.size()
+    for point, label in zip(points.iter(), plabels.iter()):
         label_idx = ref_labels.index(label)
         axis.plot(point[0], point[1], COLORS[label_idx]+'o', alpha=alpha)
+        alpha += alph_inc
 
     ellipses = []
     labels = []
@@ -232,39 +216,48 @@ def plot(time, ref_labels, class_list, points, plabels, fig, axis):
     pylab.ion()
     fig.canvas.draw()
 
-def main():
-    parser = argparse.ArgumentParser(description='Read a file of classes and return a series of randomly sampled points from those classes.')
-    parser.add_argument('filename', help='an integer for the accumulator')
-    parser.add_argument('samples', type=int, help='number of samples')
-    parser.add_argument('--plot', dest='plot', required=False, action='store_const', const=True, 
-                        help='tell if the results should be plotted')
-    args = parser.parse_args()
+
+def weightChoice(seq):
+    """Randomly choose an element from the sequence *seq* with a 
+    bias function of the weight of each element.
+    """
+    sorted_seq = sorted(seq, key=attrgetter("weight"), reverse=True)
+    sum_weights = sum(elem.weight for elem in seq)
+    u = random.random() * sum_weights
+    sum_ = 0.0
+    for elem in sorted_seq:
+        sum_ += elem.weight
+        if sum_ >= u:
+            return elem
+
+def main(filenae, samples, plot):
+    # Read file and initialize classes
+    class_list = readfile(args.filename)
     
     # Initialize figure and axis before plotting
-    if args.plot:
+    if plot:
         fig = pylab.figure(figsize=(10,10))
         ax1 = pylab.subplot2grid((3,3), (0,0), colspan=3, rowspan=3)
         pylab.ion()
         pylab.show()
         points = RingBuffer(LAST_N_PTS)
         labels = RingBuffer(LAST_N_PTS)
-    
-    class_list = readfile(args.filename)
-    ref_labels = map(attrgetter('label'), class_list)
-    
-    for i in xrange(args.samples):
+        ref_labels = map(attrgetter('label'), class_list)
+
+    for i in xrange(samples):
         class_ = weightChoice([class_ for class_ in class_list if i >= class_.start_time])
         distrib = weightChoice([distrib for distrib in class_.distributions if i >= distrib.start_time])
         spoint =  distrib.sample()[0]
         
-        # Print the sampled point
-        # and plot the resulting distribution if required
+        # Print the sampled point in CSV format
         print ", ".join(map(str, spoint))
-        if args.plot:
+        
+        # Plot the resulting distribution if required
+        if plot:
             points.append(spoint)
             labels.append(class_.label)
-            plot(i, ref_labels, class_list, points, labels, fig, ax1)
-            fig.savefig('images2/point_%i.png' % i)
+            plot_class(i, ref_labels, class_list, points, labels, fig, ax1)
+            # fig.savefig('images2/point_%i.png' % i)
         
         # Update the classes' distributions
         for class_ in class_list:
@@ -276,4 +269,10 @@ def main():
         pylab.show()
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description='Read a file of classes and return a series of randomly sampled points from those classes.')
+    parser.add_argument('filename', help='an integer for the accumulator')
+    parser.add_argument('samples', type=int, help='number of samples')
+    parser.add_argument('--plot', dest='plot', required=False, action='store_const', const=True, 
+                        help='tell if the results should be plotted')
+    args = parser.parse_args()
+    main(args.filename, args.samples, args.plot)
