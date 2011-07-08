@@ -17,7 +17,7 @@ from math import sqrt, cos, sin, pi, atan2
 from numpy import linalg
 
 # Global constant
-LAST_N_PTS = 250
+LAST_N_PTS = 25
 COLORS = ['b', 'g', 'r', 'c', 'm', 'y', 'k']
 
 class Distribution(object):
@@ -176,7 +176,7 @@ def draw_cov_ellipse(centroid, cov_matrix, sigma, ax, nbr_sigma=2.0, color='b'):
     return ax.add_patch(ellipse)    
 
 
-def plot_class(time, ref_labels, class_list, points, plabels, fig, axis):
+def plot_class(time, ref_labels, class_list, pnts_lbls, fig, axis):
     """Plot the distributions ellipses and the last sampled points.
     """
     pylab.ioff()
@@ -197,8 +197,8 @@ def plot_class(time, ref_labels, class_list, points, plabels, fig, axis):
     axis.set_ylim(min_y,max_y)
 
     # Draw the last sampled point
-    alpha = alph_inc = 1.0 / points.size()
-    for point, label in zip(points.iter(), plabels.iter()):
+    alpha = alph_inc = 1.0 / pnts_lbls.size()
+    for point, label in pnts_lbls.iter():
         label_idx = ref_labels.index(label)
         axis.plot(point[0], point[1], COLORS[label_idx]+'o', alpha=alpha)
         alpha += alph_inc
@@ -245,8 +245,7 @@ def main(filenae, samples, plot):
         ax1 = pylab.subplot2grid((3,3), (0,0), colspan=3, rowspan=3)
         pylab.ion()
         pylab.show()
-        points = RingBuffer(LAST_N_PTS)
-        labels = RingBuffer(LAST_N_PTS)
+        pnts_lbls = RingBuffer(LAST_N_PTS)
         ref_labels = map(attrgetter('label'), class_list)
 
     for i in xrange(samples):
@@ -259,9 +258,8 @@ def main(filenae, samples, plot):
         
         # Plot the resulting distribution if required
         if plot:
-            points.append(spoint)
-            labels.append(class_.label)
-            plot_class(i, ref_labels, class_list, points, labels, fig, ax1)
+            pnts_lbls.append((spoint, class_.label))
+            plot_class(i, ref_labels, class_list, pnts_lbls, fig, ax1)
             # fig.savefig('images2/point_%i.png' % i)
         
         # Update the classes' distributions
