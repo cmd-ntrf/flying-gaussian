@@ -174,6 +174,8 @@ def draw_cov_ellipse(centroid, cov_matrix, sigma, ax, nbr_sigma=2.0, color='b'):
 
 
 def plot_class(time, ref_labels, class_list, points, plabels, fig, axis):
+    """Plot the distributions ellipses and the last sampled points.
+    """
     pylab.ioff()
     axis.clear()
     
