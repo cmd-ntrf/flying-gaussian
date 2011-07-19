@@ -8,10 +8,16 @@ import numpy
 import random
 import argparse
 
-import pylab
+try:
+    import pylab
+    from matplotlib.colors import ColorConverter
+    from matplotlib.patches import Ellipse
+except:
+    MATPLOTLIB = False
+else:
+    MATPLOTLIB = True
+    color_conv = ColorConverter()
 
-from matplotlib.colors import ColorConverter
-from matplotlib.patches import Ellipse
 from collections import namedtuple, deque
 from operator import attrgetter, itemgetter
 from math import sqrt, cos, sin, pi, atan2
@@ -21,7 +27,6 @@ from itertools import imap
 # Global constant
 LAST_N_PTS = 25
 COLORS = ['b', 'g', 'r', 'c', 'm', 'y', 'k']
-color_conv = ColorConverter()
 
 class Distribution(object):
     """Object representing a multivariate normal distribution that 
@@ -216,11 +221,14 @@ def weightChoice(seq):
             return elem
 
 def main(filenae, samples, plot):
+    if plot and not MATPLOTLIB:
+        print 'Warning: the \'plot\' option was activated, but matplotlib is unavailable. Processing will continue without plotting.'    
+    
     # Read file and initialize classes
     class_list = readfile(args.filename)
     
     # Initialize figure and axis before plotting
-    if plot:
+    if plot and MATPLOTLIB:
         fig = pylab.figure(figsize=(10,10))
         ax1 = pylab.subplot2grid((3,3), (0,0), colspan=3, rowspan=3)
         pylab.ion()
@@ -235,10 +243,10 @@ def main(filenae, samples, plot):
         spoint =  distrib.sample()[0]
         
         # Print the sampled point in CSV format
-        print ", ".join(map(str, spoint))
+        print "%s, %s" % (str(class_.label), ", ".join(map(str, spoint)))
         
         # Plot the resulting distribution if required
-        if plot:
+        if plot and MATPLOTLIB:
             points.append(spoint)
             labels.append(class_.label)
             plot_class(i, ref_labels, class_list, points, labels, fig, ax1)
@@ -249,7 +257,7 @@ def main(filenae, samples, plot):
             for distrib in class_.distributions:
                 distrib.update(i)
 
-    if args.plot:
+    if plot and MATPLOTLIB:
           pylab.ioff()
           pylab.show()
 
@@ -257,7 +265,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Read a file of classes and return a series of randomly sampled points from those classes.')
     parser.add_argument('filename', help='an integer for the accumulator')
     parser.add_argument('samples', type=int, help='number of samples')
-    parser.add_argument('--plot', dest='plot', required=False, action='store_const', const=True, 
+    
+    parser.add_argument('--plot', dest='plot', required=False, const=True, action='store_const',
                         help='tell if the results should be plotted')
     args = parser.parse_args()
     main(args.filename, args.samples, args.plot)
