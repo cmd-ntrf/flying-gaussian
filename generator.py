@@ -9,7 +9,7 @@ import random
 import argparse
 
 try:
-    import pylab
+    import matplotlib.pyplot as plt
     from matplotlib.colors import ColorConverter
     from matplotlib.patches import Ellipse
 except:
@@ -55,7 +55,6 @@ class Distribution(object):
             if len(self.transforms) > 0:
                 self.cur_trans = self.transforms.pop()
                 nbr_steps = self.cur_trans.duration / self.cur_trans.steps
-            
                 self.delta_t = self.cur_trans.translate / nbr_steps
                 
                 # Compute rotation delta and rotation matrix
@@ -121,7 +120,7 @@ def readfile(filename):
             weight_sumd += distr.weight
             
             distr.centroid = jdistrib['centroid']
-            distr.ndim = len(distr.centroid)            
+            distr.ndim = len(distr.centroid)
             distr.matrix = numpy.array(jdistrib['cov_matrix'])
             distr.transforms = []
             
@@ -142,7 +141,8 @@ def readfile(filename):
         class_list.append(Class(jclass['class'], jclass['weight'], distribs, cstart_time))
         weight_sumc += class_list[-1].weight
         if weight_sumd != 1.0:
-            print 'Warning: weights sum for distribution of class %s is not equal to one, weights will be normalized.' % class_list[-1].label
+            print 'Warning: weights sum for distribution of class %s is ' \
+                  'not equal to one, weights will be normalized.' % class_list[-1].label
 
     if weight_sumc != 1.0:
         print 'Warning: weights sum the set of classes is not equal to one, weights will be normalized.'
@@ -160,10 +160,10 @@ def draw_cov_ellipse(centroid, cov_matrix, sigma, ax, nbr_sigma=2.0, color='b'):
 
     ellipse = Ellipse(xy=centroid, width=width, height=height, angle=orient, fc=color)
     ellipse.set_alpha(0.1)
-    # pylab.arrow(centroid[0], centroid[1], U[0][0], U[0][1], width=0.02)
-    # pylab.arrow(centroid[0], centroid[1], U[1][0], U[1][1], width=0.02)
+    # plt.arrow(centroid[0], centroid[1], U[0][0], U[0][1], width=0.02)
+    # plt.arrow(centroid[0], centroid[1], U[1][0], U[1][1], width=0.02)
     
-    return ax.add_patch(ellipse)    
+    return ax.add_patch(ellipse)
 
 def plot_class(time, ref_labels, class_list, points, labels, fig, axis):
     """Plot the distributions ellipses and the last sampled points.
@@ -220,19 +220,23 @@ def weightChoice(seq):
         if sum_ >= u:
             return elem
 
-def main(filenae, samples, plot):
-    if plot and not MATPLOTLIB:
-        print 'Warning: the \'plot\' option was activated, but matplotlib is unavailable. Processing will continue without plotting.'    
+def main(filenae, samples, plot, path):
+    save = path is not None
+
+    if (plot or save) and not MATPLOTLIB:
+        print 'Warning: the --plot or --save-fig options were activated, but matplotlib is unavailable. ' + \
+              'Processing will continue without plotting.'
     
     # Read file and initialize classes
     class_list = readfile(args.filename)
     
     # Initialize figure and axis before plotting
-    if plot and MATPLOTLIB:
-        fig = pylab.figure(figsize=(10,10))
-        ax1 = pylab.subplot2grid((3,3), (0,0), colspan=3, rowspan=3)
-        pylab.ion()
-        pylab.show()
+    if (plot or save) and MATPLOTLIB:
+        fig = plt.figure(figsize=(10,10))
+        ax1 = fig.add_subplot(111)
+        if plot:
+            plt.ion()
+            plt.show()
         points = deque(maxlen=LAST_N_PTS)
         labels = deque(maxlen=LAST_N_PTS)
         ref_labels = map(attrgetter('label'), class_list)
@@ -246,11 +250,12 @@ def main(filenae, samples, plot):
         print "%s, %s" % (str(class_.label), ", ".join(map(str, spoint)))
         
         # Plot the resulting distribution if required
-        if plot and MATPLOTLIB:
+        if (plot or save) and MATPLOTLIB:
             points.append(spoint)
             labels.append(class_.label)
             plot_class(i, ref_labels, class_list, points, labels, fig, ax1)
-            # fig.savefig('images2/point_%i.png' % i)
+            if save:
+                fig.savefig(path+'/point_%i.png' % i)
         
         # Update the classes' distributions
         for class_ in class_list:
@@ -258,15 +263,18 @@ def main(filenae, samples, plot):
                 distrib.update(i)
 
     if plot and MATPLOTLIB:
-          pylab.ioff()
-          pylab.show()
+          plt.ioff()
+          plt.show()
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Read a file of classes and return a series of randomly sampled points from those classes.')
+    parser = argparse.ArgumentParser(description='Read a file of classes and return a series of '+\
+                                                 'randomly sampled points from those classes.')
     parser.add_argument('filename', help='an integer for the accumulator')
     parser.add_argument('samples', type=int, help='number of samples')
     
-    parser.add_argument('--plot', dest='plot', required=False, action='store_true',
+    parser.add_argument('--plot', dest='plot', required=False, action='store_true', default=False,
                         help='tell if the results should be plotted')
+    parser.add_argument('--save-fig', dest='save_path', required=False, metavar='PATH', 
+                        help='indicate where the figure should be saved')
     args = parser.parse_args()
-    main(args.filename, args.samples, args.plot)
+    main(args.filename, args.samples, args.plot, args.save_path)
