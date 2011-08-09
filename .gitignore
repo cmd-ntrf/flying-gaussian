@@ -1,2 +1,6 @@
 img/*
 *.pyc
+
+initial_pitch
+
+config/touching_2class.json
