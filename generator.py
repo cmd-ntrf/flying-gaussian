@@ -266,7 +266,7 @@ if __name__ == "__main__":
     parser.add_argument('filename', help='an integer for the accumulator')
     parser.add_argument('samples', type=int, help='number of samples')
     
-    parser.add_argument('--plot', dest='plot', required=False, const=True, action='store_const',
+    parser.add_argument('--plot', dest='plot', required=False, action='store_true',
                         help='tell if the results should be plotted')
     args = parser.parse_args()
     main(args.filename, args.samples, args.plot)
