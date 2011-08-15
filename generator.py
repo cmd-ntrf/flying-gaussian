@@ -347,7 +347,7 @@ def main(filename, samples, plot, path):
         
         # Update the classes' distributions
         for class_ in class_list:
-                class_.update(i)
+            class_.update(i)
 
     if plot and MATPLOTLIB:
         plt.ioff()
