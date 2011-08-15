@@ -94,7 +94,7 @@ class Distribution(object):
 Class = namedtuple('Class', ['label', 'weight', 'distributions', 'start_time'])
 Transform = namedtuple('Transform', ['duration', 'steps', 'translate', 'scale', 'rotate'])
 
-def readfile(filename):
+def read_file(filename):
     """Read a JSON file containing the classes, the distributions and the transformations, 
     and initialize the corresponding object. The function return a list of initialized classes.
     """
@@ -207,7 +207,7 @@ def plot_class(time, ref_labels, class_list, points, labels, fig, axis):
     axis.legend(ellipses, labels)
     fig.canvas.draw()
 
-def weightChoice(seq):
+def weight_choice(seq):
     """Randomly choose an element from the sequence *seq* with a 
     bias function of the weight of each element.
     """
@@ -228,7 +228,7 @@ def main(filenae, samples, plot, path):
               'Processing will continue without plotting.'
     
     # Read file and initialize classes
-    class_list = readfile(args.filename)
+    class_list = read_file(args.filename)
     
     # Initialize figure and axis before plotting
     if (plot or save) and MATPLOTLIB:
@@ -242,8 +242,8 @@ def main(filenae, samples, plot, path):
         ref_labels = map(attrgetter('label'), class_list)
 
     for i in xrange(samples):
-        class_ = weightChoice([class_ for class_ in class_list if i >= class_.start_time])
-        distrib = weightChoice([distrib for distrib in class_.distributions if i >= distrib.start_time])
+        class_ = weight_choice([class_ for class_ in class_list if i >= class_.start_time])
+        distrib = weight_choice([distrib for distrib in class_.distributions if i >= distrib.start_time])
         spoint =  distrib.sample()[0]
         
         # Print the sampled point in CSV format
