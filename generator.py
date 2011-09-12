@@ -23,6 +23,7 @@ from itertools import imap
 from math import sqrt, cos, sin, pi, atan2
 from operator import attrgetter, itemgetter
 
+import numpy
 from numpy import linalg
 from numpy.random import multivariate_normal
 
@@ -305,7 +306,10 @@ def weight_choice(seq):
         if sum_ >= u:
             return elem
 
-def main(filename, samples, plot, path):
+def main(filename, samples, plot, path, seed=None):
+    random.seed(seed)
+    numpy.random.seed(seed)
+    
     save = path is not None
 
     if (plot or save) and not MATPLOTLIB:
@@ -368,5 +372,9 @@ if __name__ == "__main__":
     parser.add_argument('--save-fig', dest='save_path', required=False, 
                         metavar='PATH', 
                         help='indicate where the figure should be saved')
+    parser.add_argument('--seed', type=int, default=None, required=False, 
+                        metavar='SEED',
+                        help='random number generator seed')
+    
     args = parser.parse_args()
-    main(args.filename, args.samples, args.plot, args.save_path)
+    main(args.filename, args.samples, args.plot, args.save_path, args.seed)
