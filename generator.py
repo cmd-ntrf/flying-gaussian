@@ -23,7 +23,6 @@ from itertools import imap
 from math import sqrt, cos, sin, pi, atan2
 from operator import attrgetter, itemgetter
 
-import numpy
 from numpy import linalg
 from numpy.random import multivariate_normal
 
