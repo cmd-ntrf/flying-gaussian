@@ -20,7 +20,7 @@ else:
 
 from collections import namedtuple, deque
 from itertools import imap
-from math import sqrt, cos, sin, pi, atan2
+from math import sqrt, cos, sin, pi, atan2, exp
 from operator import attrgetter, itemgetter
 
 from numpy import linalg
@@ -131,7 +131,7 @@ class Distribution(object):
                 self.delta_s = sigma / nbr_steps
 
                 # Compute the weight delta
-                self.delta_w = self.cur_trans.weight / nbr_steps
+                self.delta_w = (self.cur_trans.weight - self.weight) / nbr_steps
             else:
                 return
 
@@ -305,6 +305,16 @@ def weight_choice(seq):
         if sum_ >= u:
             return elem
 
+def normpdf(point, dist):
+    """Compute the probability to pick the point `point` with the
+    distribution `dist`.
+    """
+    prob = 1.0/sqrt(2*pi*linalg.det(dist.scale*dist.matrix))
+    prob *= exp(-0.5 * numpy.dot((point - dist.centroid).T,
+                                 numpy.dot(linalg.inv(dist.scale*dist.matrix),
+                                           point - dist.centroid)))
+    return prob
+
 def main(filename, samples, plot, path, seed=None):
     random.seed(seed)
     numpy.random.seed(seed)
@@ -331,15 +341,28 @@ def main(filename, samples, plot, path, seed=None):
         ref_labels = map(attrgetter('label'), class_list)
 
     for i in xrange(samples):
-        class_ = weight_choice([class_ for class_ in class_list 
+        cclass = weight_choice([class_ for class_ in class_list 
                                     if i >= class_.start_time])
-        distrib = weight_choice([distrib for distrib in class_.distributions
+        cdistrib = weight_choice([distrib for distrib in cclass.distributions
                                     if i >= distrib.start_time])
-        spoint = distrib.sample()[0]
+        spoint = cdistrib.sample()[0]
+
+        # Compute the probability for each class
+        # doesn't yey consider the start_time
+        # it also presumes the weights are balanced.
+        probs = []
+        for class_ in class_list:
+            prob_class = class_.weight
+            prob_dist = 0.0
+            for dist in class_.distributions:
+                prob_dist += dist.weight * normpdf(spoint, dist)
+            probs.append(prob_class * prob_dist)
         
         # Print the sampled point in CSV format
-        print "%s, %s" % (str(class_.label), ", ".join(map(str, spoint)))
-        
+        print "%s, %s, %s" % (str(cclass.label), ", ".join(map(str, spoint)), 
+                              ", ".join(map(str, probs)))
+       
+
         # Plot the resulting distribution if required
         if (plot or save) and MATPLOTLIB:
             points.append(spoint)
