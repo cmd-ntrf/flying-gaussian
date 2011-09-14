@@ -19,9 +19,9 @@ else:
     color_conv = ColorConverter()
 
 from collections import namedtuple, deque
-from itertools import imap
+from itertools import imap, repeat
 from math import sqrt, cos, sin, pi, atan2, exp
-from operator import attrgetter, itemgetter
+from operator import attrgetter, itemgetter, div
 
 from numpy import linalg
 from numpy.random import multivariate_normal
@@ -86,7 +86,16 @@ class Distribution(object):
         self.transforms = []
         self.cur_trans = None
         self.scale = 1.0
-        
+
+    def pdf(self, point):
+        """Compute the probability to sample a *point*."""
+        prob = 1.0/sqrt(2*pi*linalg.det(self.scale*self.matrix))
+        prob *= exp(-0.5 * numpy.dot((point - self.centroid).T,
+                                     numpy.dot(linalg.inv(self.scale*self.matrix),
+                                               point - self.centroid)))
+        return prob
+
+       
     def sample(self, size=1):
         """Sample the actual distribution *size* times."""
         return multivariate_normal(self.centroid, self.scale*self.matrix, 
@@ -225,7 +234,7 @@ def read_file(filename):
                   'will be normalized.' % class_list[-1].label
 
     if weight_sumc != 1.0:
-        print 'Warning: weights sum the set of classes ' \
+        print 'Warning: weights sum for the set of classes ' \
               'is not equal to one, weights will be normalized.'
 
     return class_list
@@ -305,17 +314,7 @@ def weight_choice(seq):
         if sum_ >= u:
             return elem
 
-def normpdf(point, dist):
-    """Compute the probability to pick the point `point` with the
-    distribution `dist`.
-    """
-    prob = 1.0/sqrt(2*pi*linalg.det(dist.scale*dist.matrix))
-    prob *= exp(-0.5 * numpy.dot((point - dist.centroid).T,
-                                 numpy.dot(linalg.inv(dist.scale*dist.matrix),
-                                           point - dist.centroid)))
-    return prob
-
-def main(filename, samples, plot, path, seed=None):
+def main(filename, samples, oracle, plot, path, seed=None):
     random.seed(seed)
     numpy.random.seed(seed)
     
@@ -340,28 +339,57 @@ def main(filename, samples, plot, path, seed=None):
         labels = deque(maxlen=LAST_N_PTS)
         ref_labels = map(attrgetter('label'), class_list)
 
+
+    # Print CSV header
+    if oracle:
+        print "%s, %s, %s" % ('label',
+                              ", ".join('x%i'% i for i in
+                                        xrange(len(class_list[0].distributions[0].centroid))), 
+                              ", ".join('%s' % class_.label for class_ in
+                                        class_list))
+    else:
+        print "%s, %s" % ('label',
+                          ", ".join('x%i'% i for i in
+                                    xrange(len(class_list[0].distributions[0].centroid)))) 
+        
+
     for i in xrange(samples):
         cclass = weight_choice([class_ for class_ in class_list 
-                                    if i >= class_.start_time])
+                                if class_.start_time <= i])
         cdistrib = weight_choice([distrib for distrib in cclass.distributions
-                                    if i >= distrib.start_time])
+                                  if distrib.start_time <= i])
         spoint = cdistrib.sample()[0]
 
         # Compute the probability for each class
         # doesn't yey consider the start_time
         # it also presumes the weights are balanced.
         probs = []
+        classes_weight_sum = sum(class_.weight for class_ in class_list 
+                                 if class_.start_time <= i)
         for class_ in class_list:
-            prob_class = class_.weight
-            prob_dist = 0.0
-            for dist in class_.distributions:
-                prob_dist += dist.weight * normpdf(spoint, dist)
-            probs.append(prob_class * prob_dist)
+            if class_.start_time <= i:
+                prob_class = class_.weight / classes_weight_sum
+                prob_dist = 0.0
+                dists_weight_sum = sum(dist.weight 
+                                       for dist in class_.distributions
+                                       if dist.start_time <= i)
+                for dist in class_.distributions:
+                    prob_dist += dist.weight / dists_weight_sum * dist.pdf(spoint)
+                probs.append(prob_class * prob_dist)
+            else:
+                probs.append(0.0)
         
+        # Normalize probabilities
+        probs = map(div, probs, repeat(sum(probs), len(probs)))
+
         # Print the sampled point in CSV format
-        print "%s, %s, %s" % (str(cclass.label), ", ".join(map(str, spoint)), 
-                              ", ".join(map(str, probs)))
-       
+        if oracle:
+            print "%s, %s, %s" % (str(cclass.label), 
+                                  ", ".join("%s" % v for v in spoint), 
+                                  ", ".join("%.3f" % prob for prob in probs))
+        else:
+            print "%s, %s" % (str(cclass.label), 
+                              ", ".join("%s" % v for v in spoint)) 
 
         # Plot the resulting distribution if required
         if (plot or save) and MATPLOTLIB:
@@ -388,6 +416,10 @@ if __name__ == "__main__":
     parser.add_argument('filename', help='an integer for the accumulator')
     parser.add_argument('samples', type=int, help='number of samples')
     
+    parser.add_argument('--oracle', dest='oracle', required=False, 
+                        action='store_true', default=False,
+                        help='append to the point its probability of ' \
+                             'belonging to each class')
     parser.add_argument('--plot', dest='plot', required=False, 
                         action='store_true', default=False,
                         help='tell if the results should be plotted')
@@ -399,4 +431,4 @@ if __name__ == "__main__":
                         help='random number generator seed')
     
     args = parser.parse_args()
-    main(args.filename, args.samples, args.plot, args.save_path, args.seed)
+    main(args.filename, args.samples, args.oracle, args.plot, args.save_path, args.seed)
