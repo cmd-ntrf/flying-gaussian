@@ -361,8 +361,10 @@ def main(filename, samples, oracle, plot, path, seed=None):
         spoint = cdistrib.sample()[0]
 
         # Compute the probability for each class
-        # doesn't yey consider the start_time
-        # it also presumes the weights are balanced.
+        # The probability of having sampled a point from a class C_i knowing x is given by :
+        # P(C_i | x) = \frac{P(C_i) p(x | C_i)}{\sum_j{P(C_j) p(x | C_j) }}
+        # p(x | C_i) = \sum_k{ P(G_k) p(x | G_k)}
+        # Where G_k are the gaussian distribution of class C_i
         probs = []
         classes_weight_sum = sum(class_.weight for class_ in class_list 
                                  if class_.start_time <= i)
