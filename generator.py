@@ -10,12 +10,12 @@ import argparse
 
 try:
     import matplotlib.pyplot as plt
-    from matplotlib.colors import ColorConverter
-    from matplotlib.patches import Ellipse
 except ImportError:
     MATPLOTLIB = False
 else:
     MATPLOTLIB = True
+    from matplotlib.colors import ColorConverter
+    from matplotlib.patches import Ellipse    
     color_conv = ColorConverter()
 
 from collections import namedtuple, deque
