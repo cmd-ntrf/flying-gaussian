@@ -3,10 +3,13 @@
 labeled distributions that can move, rotate and scale along time.
 Each sample correspond to one unit of time.
 """
-import json
-import numpy
-import random
+
 import argparse
+import json
+import random
+
+
+import numpy
 
 try:
     import matplotlib.pyplot as plt
@@ -25,6 +28,7 @@ from operator import attrgetter, itemgetter, div
 
 from numpy import linalg
 from numpy.random import multivariate_normal
+from scipy.stats import chi2
 
 # Global constant
 LAST_N_PTS = 25
@@ -239,21 +243,24 @@ def read_file(filename):
 
     return class_list
 
-def draw_cov_ellipse(centroid, cov_matrix, sigma, ax, 
-                     nbr_sigma=2.0, color='b'):
-    """Example from matplotlib mailing list :
+def draw_cov_ellipse(centroid, cov_matrix, ax, 
+                     perc=0.95, color='b'):
+    """Draw the ellipse associated with the multivariate normal distribution
+    defined by *centroid* and *cov_matrix*. The *perc* argument specified 
+    the percentage of the distribution mass that will be drawn.
+
+    This function is based on the example posted on Matplotlib mailing-list:
     http://www.mail-archive.com/matplotlib-users@lists.sourceforge.net/msg14153.html
     """
-    U, s, Vh = linalg.svd(cov_matrix)
-    orient = atan2(U[1,0],U[0,0])*180.0/pi
-    width = nbr_sigma*sigma*sqrt(s[0])
-    height = nbr_sigma*sigma*sqrt(s[1])
+    U, s, _ = linalg.svd(cov_matrix)
+    orient = atan2(U[1, 0], U[0, 0]) * 180.0/pi
+
+    c = chi2.isf(1 - perc, len(centroid))
+    width = 2.0 * sqrt(s[0] * c)
+    height = 2.0 * sqrt(s[1] * c)
 
     ellipse = Ellipse(xy=centroid, width=width, height=height, 
-                      angle=orient, fc=color)
-    ellipse.set_alpha(0.1)
-    # plt.arrow(centroid[0], centroid[1], U[0][0], U[0][1], width=0.02)
-    # plt.arrow(centroid[0], centroid[1], U[1][0], U[1][1], width=0.02)
+                      angle=orient, fc=color, alpha=0.1)
     
     return ax.add_patch(ellipse)
 
@@ -291,8 +298,8 @@ def plot_class(time, ref_labels, class_list, points, labels, fig, axis):
         present = False
         for distrib in class_.distributions:
             if time >= distrib.start_time:
-                ref_ell = draw_cov_ellipse(distrib.centroid, distrib.matrix,
-                                        distrib.scale, axis, 4.0, COLORS[i])
+                ref_ell = draw_cov_ellipse(distrib.centroid, distrib.matrix * distrib.scale,
+                                           perc=0.95, ax=axis, color=COLORS[i])
                 if not present:
                     ellipses.append(ref_ell)
                     labels.append(class_.label)
@@ -415,7 +422,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Read a file of classes'\
             'and return a series of randomly sampled points from those '\
             'classes.')
-    parser.add_argument('filename', help='an integer for the accumulator')
+    parser.add_argument('filename', help='json file containing the classes')
     parser.add_argument('samples', type=int, help='number of samples')
     
     parser.add_argument('--oracle', dest='oracle', required=False, 
